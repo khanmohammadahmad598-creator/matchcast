@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/khanmohammadahmad598-creator/matchcast/actions/workflows/ci.yml/badge.svg)](https://github.com/khanmohammadahmad598-creator/matchcast/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-81%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-86%20passing-brightgreen.svg)](#testing)
 
 Broadcast **your own** sports production to YouTube Live with an automatic
 scoreboard, AI commentary in Hindi/Hinglish/English, text-to-speech voiceover
@@ -38,11 +38,11 @@ score events ──▶ AI commentary ─▶ Hindi/Hinglish TTS ─▶ audio mix 
 | 11 | **Persistence** | PostgreSQL + Prisma: users, matches, teams, players, innings, balls, score events, commentary, TTS audio, stream sessions, graphics templates, system logs |
 | 12 | **Realtime** | Socket.IO: score → dashboard + graphics + commentary instantly, no refresh |
 | 13 | **Failover** | Input / YouTube / TTS / AI / scoring API / graphics / ffmpeg failures all degrade gracefully — the stream keeps running |
-| 14 | **Security** | bcrypt hashes, JWT auth, role-based admin APIs (ADMIN/OPERATOR/VIEWER), rate limiting, zod validation everywhere, secret management |
+| 14 | **Security** | bcrypt hashes, JWT auth, role-based admin APIs (ADMIN/OPERATOR/VIEWER), self-service password rotation, rate limiting, zod validation everywhere, secret management |
 | 15 | **Stack** | React + TS + Tailwind · Node + TS + Express · Socket.IO · PostgreSQL + Prisma · FFmpeg · provider abstractions · Docker Compose |
 | 16 | **Docker** | 6 services: frontend, backend, postgres, redis, stream-worker, graphics-worker |
 | 17 | **Repo layout** | `/frontend /backend /stream-worker /graphics-worker /shared /docker /scripts /docs` + `.env.example`, Dockerfiles, compose file, migrations, API docs |
-| 18 | **Tests** | 81 vitest specs: scoring, commentary, TTS queue, ffmpeg args + restart/backoff, YouTube target masking, auth/RBAC, API validation, graphics templates, **realtime Socket.IO delivery + worker command routing** |
+| 18 | **Tests** | 86 vitest specs: scoring, commentary, TTS queue, ffmpeg args + restart/backoff, YouTube target masking, auth/RBAC, API validation, graphics templates, **realtime Socket.IO delivery + worker command routing** |
 | 19 | **Demo mode** | Synthetic locally generated match clip + scripted deliveries → commentary + TTS + scoreboard + RTMP output, no third-party content |
 
 ---
@@ -62,7 +62,7 @@ npm run dev                                  # backend :4000 + frontend :5173 + 
 Open http://localhost:5173 → login `admin@matchcast.local` / `ChangeMeNow123!`
 → **Streaming** → tick the rights checkbox → **Start**.
 
-Detailed instructions: [`docs/SETUP.md`](docs/SETUP.md).
+Detailed instructions: [`docs/SETUP.md`](docs/SETUP.md) · [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 Docker:
 
@@ -195,7 +195,7 @@ Everything is documented in [`.env.example`](.env.example) and
 
 ```bash
 npm run typecheck           # tsc --noEmit, all 5 packages
-npm test                    # 81 vitest specs (backend 36, stream-worker 39, graphics 6)
+npm test                    # 86 vitest specs (backend 41, stream-worker 39, graphics 6)
 bash scripts/demo.sh        # full end-to-end demo against a running stack
 ```
 

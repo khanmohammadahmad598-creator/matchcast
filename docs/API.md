@@ -35,6 +35,7 @@ the online/offline state of both workers.
 | POST | `/api/auth/logout` | – | Clears the session cookie |
 | GET | `/api/auth/me` | viewer | Current user from token |
 | POST | `/api/auth/register` | admin | Creates `ADMIN`/`OPERATOR`/`VIEWER` users |
+| POST | `/api/auth/change-password` | any session | Rotates your own password: `{ currentPassword, newPassword }` (min 12 chars). Rate limited (20 / 15 min) |
 
 Passwords are hashed with bcrypt (cost 12). Tokens are signed with `JWT_SECRET`
 and expire after `JWT_EXPIRES_IN` (default 12h).

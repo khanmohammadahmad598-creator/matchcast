@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useStore } from '../state/store';
-import { StatusDot } from './ui';
+import { api, endpoints } from '../lib/api';
+import { Modal, StatusDot } from './ui';
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: '◉' },
@@ -14,6 +16,39 @@ const NAV = [
 export function Layout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const { user, logout, stream, connected, workers } = useStore();
+
+  // ---------------------------------------------------------- password rotate
+  const [pwOpen, setPwOpen] = useState(false);
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [pwError, setPwError] = useState<string | null>(null);
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwDone, setPwDone] = useState(false);
+
+  const closePassword = () => {
+    setPwOpen(false);
+    setCurrent('');
+    setNext('');
+    setPwError(null);
+    setPwDone(false);
+  };
+
+  const submitPassword = async () => {
+    setPwBusy(true);
+    setPwError(null);
+    try {
+      await api(endpoints.changePassword, {
+        method: 'POST',
+        body: { currentPassword: current, newPassword: next },
+      });
+      setPwDone(true);
+      setTimeout(closePassword, 1200);
+    } catch (err) {
+      setPwError(err instanceof Error ? err.message : 'Could not change the password');
+    } finally {
+      setPwBusy(false);
+    }
+  };
 
   const live = stream?.running && (stream.state === 'CONNECTED' || stream.state === 'CONNECTING');
 
@@ -80,6 +115,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 {user.email} · <span className="text-accent">{user.role}</span>
               </span>
             )}
+            <button className="btn-ghost" onClick={() => setPwOpen(true)}>
+              Password
+            </button>
             <button
               className="btn-ghost"
               onClick={async () => {
@@ -91,6 +129,44 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </button>
           </div>
         </header>
+
+        {pwOpen && (
+          <Modal title="Change password" onClose={closePassword}>
+            <label className="block text-xs text-slate-400">
+              Current password
+              <input
+                className="input mt-1 w-full"
+                type="password"
+                autoFocus
+                value={current}
+                onChange={(e) => setCurrent(e.target.value)}
+              />
+            </label>
+            <label className="block text-xs text-slate-400">
+              New password (min 12 characters)
+              <input
+                className="input mt-1 w-full"
+                type="password"
+                value={next}
+                onChange={(e) => setNext(e.target.value)}
+              />
+            </label>
+            {pwError && <p className="text-xs text-danger">{pwError}</p>}
+            {pwDone && <p className="text-xs text-emerald-400">Password updated.</p>}
+            <div className="flex justify-end gap-2 pt-1">
+              <button className="btn-ghost" onClick={closePassword} disabled={pwBusy}>
+                Cancel
+              </button>
+              <button
+                className="btn"
+                onClick={() => void submitPassword()}
+                disabled={pwBusy || current.length === 0 || next.length < 12}
+              >
+                {pwBusy ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </Modal>
+        )}
 
         <main className="flex-1 overflow-y-auto p-5">
           <div className="mx-auto max-w-[1400px]">{children}</div>

@@ -1,0 +1,92 @@
+# ---------------------------------------------------------------------------
+# Production overrides. Applied on top of docker-compose.yml:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# What changes vs the default (single-host dev) file:
+#   * postgres / redis are bound to 127.0.0.1 instead of 0.0.0.0 (no public port)
+#   * backend + frontend bind to 127.0.0.1 and sit behind the host reverse proxy
+#   * log rotation so a chatty ffmpeg cannot fill the disk
+#   * memory / CPU limits so one runaway component cannot take the box down
+#   * optional hardware-encoder passthrough (commented - see docs/DEPLOYMENT.md)
+# ---------------------------------------------------------------------------
+
+services:
+  # Portability note: `!reset` (Compose 2.24+) is deliberately avoided here.
+  # Binding to 127.0.0.1 keeps pg_dump/redis-cli usable from the host while
+  # keeping the services off the public interface.
+  postgres:
+    ports:
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
+    logging: &default-logging
+      driver: json-file
+      options:
+        max-size: '20m'
+        max-file: '5'
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  redis:
+    ports:
+      - '127.0.0.1:${REDIS_PORT:-6379}:6379'
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  backend:
+    ports:
+      - '127.0.0.1:${BACKEND_PORT:-4000}:4000'
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    environment:
+      # Behind a proxy the browser only ever talks to https://<your-domain>.
+      ALLOW_ANY_ORIGIN: 'false'
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://localhost}
+      COOKIE_SECURE: 'true'
+
+  stream-worker:
+    logging: *default-logging
+    # ffmpeg is the hungriest process on the box - give it real headroom.
+    deploy:
+      resources:
+        limits:
+          memory: 3g
+    # Hardware encoding (uncomment the block that matches your host):
+    #
+    # VA-API (Intel/AMD iGPU):
+    # devices:
+    #   - /dev/dri:/dev/dri
+    #
+    # NVIDIA NVENC (needs the NVIDIA container toolkit on the host):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu, video]
+    environment:
+      HW_ACCEL: ${HW_ACCEL:-auto}
+
+  graphics-worker:
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  frontend:
+    ports:
+      - '127.0.0.1:${FRONTEND_PORT:-8080}:80'
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 256m

@@ -60,6 +60,7 @@ export const endpoints = {
   login: '/api/auth/login',
   me: '/api/auth/me',
   logout: '/api/auth/logout',
+  changePassword: '/api/auth/change-password',
   matches: '/api/matches',
   match: (id: string) => `/api/matches/${id}`,
   matchPlayers: (id: string) => `/api/matches/${id}/players`,

@@ -215,3 +215,41 @@ export function useDebouncedCallback<T extends (...args: never[]) => void>(fn: T
     timer = setTimeout(() => fn(...args), delay);
   };
 }
+
+/**
+ * Minimal accessible dialog: closes on Escape and on backdrop click, traps the
+ * initial focus on the first input.
+ */
+export function Modal({
+  title,
+  onClose,
+  children,
+  footer,
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+  footer?: ReactNode;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      onClick={onClose}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') onClose();
+      }}
+    >
+      <div
+        className="card w-full max-w-sm space-y-3"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-sm font-semibold text-slate-100">{title}</h2>
+        {children}
+        {footer}
+      </div>
+    </div>
+  );
+}

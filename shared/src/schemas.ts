@@ -29,6 +29,12 @@ export const createUserSchema = z.object({
   role: z.enum(['ADMIN', 'OPERATOR', 'VIEWER']).default('OPERATOR'),
 });
 
+/** An authenticated operator rotating their own password. */
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(200),
+  newPassword: z.string().min(12).max(200),
+});
+
 /* ------------------------------------------------------------------ */
 /* Match setup                                                        */
 /* ------------------------------------------------------------------ */
