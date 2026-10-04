@@ -1,0 +1,50 @@
+# ---------------------------------------------------------------------------
+# Shared base image for every Node service in the monorepo.
+#
+# Build context is always the repository root, so the whole workspace (shared,
+# backend, stream-worker, graphics-worker) is available at build time.
+# ---------------------------------------------------------------------------
+FROM node:20-bookworm-slim
+
+# FFmpeg (encoding, audio mixing, TTS decoding) + fonts for the Skia renderer.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ffmpeg \
+      ca-certificates \
+      fonts-dejavu-core \
+      fontconfig \
+      procps \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV NODE_ENV=production
+ENV TZ=UTC
+WORKDIR /app
+
+# Workspace manifests first: dependency layers stay cached while code changes.
+COPY package.json package-lock.json ./
+COPY shared/package.json ./shared/
+COPY backend/package.json ./backend/
+COPY stream-worker/package.json ./stream-worker/
+COPY graphics-worker/package.json ./graphics-worker/
+COPY frontend/package.json ./frontend/
+
+RUN npm ci --omit=dev --ignore-scripts || npm install --omit=dev --ignore-scripts
+
+# Full source (tsconfigs, prisma schema, src).
+COPY shared ./shared
+COPY backend ./backend
+COPY stream-worker ./stream-worker
+COPY graphics-worker ./graphics-worker
+
+# Build the shared types package first, then every service.
+RUN npm run build -w @matchcast/shared \
+ && npm run build -w @matchcast/backend \
+ && npm run build -w @matchcast/stream-worker \
+ && npm run build -w @matchcast/graphics-worker
+
+# Prisma client must exist at runtime; generate it against the schema.
+RUN npx prisma generate --schema=backend/prisma/schema.prisma
+
+RUN mkdir -p /app/.runtime/frames /app/.runtime/preview /app/.runtime/tts /app/.runtime/replay /app/.runtime/logs
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||4000)+'/api/system/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"

@@ -1,0 +1,9 @@
+FROM matchcast/base:latest
+
+ENV NODE_ENV=production
+
+# The stream-worker needs the demo asset and a writable runtime directory.
+COPY demo-assets /app/demo-assets
+VOLUME ["/app/.runtime"]
+
+CMD ["node", "/app/stream-worker/dist/index.js"]

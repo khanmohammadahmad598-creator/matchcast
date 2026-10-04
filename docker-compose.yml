@@ -1,0 +1,150 @@
+# ---------------------------------------------------------------------------
+# MatchCast - full stack on one host.
+#
+#   docker compose up -d --build
+#   docker compose logs -f stream-worker
+#
+# Build the base image first (the services inherit from it):
+#   docker build -t matchcast/base:latest -f docker/Dockerfile.base .
+# ---------------------------------------------------------------------------
+name: matchcast
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-matchcast}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-matchcast}
+      POSTGRES_DB: ${POSTGRES_DB:-matchcast}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-matchcast} -d ${POSTGRES_DB:-matchcast}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--save', '60', '1', '--appendonly', 'no']
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: '4000'
+      HOST: 0.0.0.0
+      DATABASE_URL: postgresql://${POSTGRES_USER:-matchcast}:${POSTGRES_PASSWORD:-matchcast}@postgres:5432/${POSTGRES_DB:-matchcast}?schema=public
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-12h}
+      WORKER_TOKEN: ${WORKER_TOKEN:?set WORKER_TOKEN in .env}
+      SCORING_API_KEY: ${SCORING_API_KEY:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+      ALLOW_ANY_ORIGIN: ${ALLOW_ANY_ORIGIN:-false}
+      PREVIEW_TOKEN: ${PREVIEW_TOKEN:-preview}
+      # Never log the key; it is read from the environment only.
+      YOUTUBE_RTMP_URL: ${YOUTUBE_RTMP_URL:-rtmps://a.rtmps.youtube.com/live2}
+      YOUTUBE_STREAM_KEY: ${YOUTUBE_STREAM_KEY:-}
+      MEDIA_DIR: /app/.runtime/media
+      PREVIEW_DIR: /app/.runtime/preview
+      TTS_DIR: /app/.runtime/tts
+      FRAMES_DIR: /app/.runtime/frames
+      LOG_DIR: /app/.runtime/logs
+      DEFAULT_ADMIN_EMAIL: ${DEFAULT_ADMIN_EMAIL:-admin@matchcast.local}
+      DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD:-ChangeMeNow123!}
+    volumes:
+      - runtime-data:/app/.runtime
+    expose:
+      - '4000'
+    ports:
+      - '${BACKEND_PORT:-4000}:4000'
+
+  stream-worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.stream-worker
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      BACKEND_URL: http://backend:4000
+      WORKER_TOKEN: ${WORKER_TOKEN:?set WORKER_TOKEN in .env}
+      WORKER_NAME: stream-worker
+      YOUTUBE_RTMP_URL: ${YOUTUBE_RTMP_URL:-rtmps://a.rtmps.youtube.com/live2}
+      YOUTUBE_STREAM_KEY: ${YOUTUBE_STREAM_KEY:-}
+      RTMP_TEST_URL: ${RTMP_TEST_URL:-}
+      DEMO_VIDEO: /app/demo-assets/demo-match.mp4
+      FFMPEG_PATH: ${FFMPEG_PATH:-ffmpeg}
+      HW_ACCEL: ${HW_ACCEL:-auto}
+      FRAMES_DIR: /app/.runtime/frames
+      TTS_DIR: /app/.runtime/tts
+      PREVIEW_DIR: /app/.runtime/preview
+      REPLAY_DIR: /app/.runtime/replay
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      GOOGLE_TTS_API_KEY: ${GOOGLE_TTS_API_KEY:-}
+    volumes:
+      - runtime-data:/app/.runtime
+    # Optional hardware encoding (/dev/dri for VA-API); remove if not needed.
+    devices:
+      - ${VAAPI_DEVICE:-/dev/null:/dev/null}
+
+  graphics-worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.graphics-worker
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      BACKEND_URL: http://backend:4000
+      WORKER_TOKEN: ${WORKER_TOKEN:?set WORKER_TOKEN in .env}
+      WORKER_NAME: graphics-worker
+      FRAMES_DIR: /app/.runtime/frames
+      GRAPHICS_FPS: ${GRAPHICS_FPS:-15}
+    volumes:
+      - runtime-data:/app/.runtime
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        VITE_API_BASE: /api
+        VITE_PREVIEW_TOKEN: ${PREVIEW_TOKEN:-preview}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - '${FRONTEND_PORT:-8080}:80'
+
+volumes:
+  postgres-data:
+  redis-data:
+  runtime-data:

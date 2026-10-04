@@ -1,0 +1,14 @@
+FROM matchcast/base:latest
+
+ENV NODE_ENV=production
+ENV PORT=4000
+ENV HOST=0.0.0.0
+
+EXPOSE 4000
+
+# Migrations + seed run through the entrypoint so a fresh volume is usable
+# immediately (see docker/entrypoint-backend.sh).
+COPY docker/entrypoint-backend.sh /usr/local/bin/entrypoint-backend.sh
+RUN chmod +x /usr/local/bin/entrypoint-backend.sh
+
+CMD ["entrypoint-backend.sh"]

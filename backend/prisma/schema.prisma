@@ -1,0 +1,387 @@
+// MatchCast - PostgreSQL schema
+// Prisma schema. Run `npm run db:migrate` (dev) or `prisma migrate deploy` (prod).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+enum MatchStatus {
+  SCHEDULED
+  LIVE
+  INNINGS_BREAK
+  COMPLETED
+  ABANDONED
+  PAUSED
+}
+
+enum MatchFormat {
+  T20
+  ODI
+  TEST
+  T10
+  HUNDRED
+  CUSTOM
+}
+
+enum PlayerRole {
+  BAT
+  BOWL
+  AR
+  WK
+}
+
+enum ExtraType {
+  WD
+  NB
+  LB
+  B
+  P
+}
+
+enum DismissalKind {
+  BOWLED
+  CAUGHT
+  LBW
+  RUN_OUT
+  STUMPED
+  HIT_WICKET
+  CAUGHT_AND_BOWLED
+  RETIRED_OUT
+  OTHER
+}
+
+enum MatchEventType {
+  BALL
+  FOUR
+  SIX
+  WICKET
+  MILESTONE
+  OVER_END
+  INNINGS_END
+  MATCH_END
+  MATCH_START
+  CUSTOM
+}
+
+enum TtsStatus {
+  PENDING
+  SYNTHESISING
+  READY
+  PLAYED
+  FAILED
+  SKIPPED
+}
+
+enum InputKind {
+  rtmp
+  srt
+  hls
+  file
+  device
+  demo
+}
+
+enum SessionEndReason {
+  STOPPED
+  CRASHED
+  INPUT_LOST
+  OUTPUT_LOST
+  RESTARTED
+}
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         UserRole  @default(OPERATOR)
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  attestedSources AuthorizedSource[]
+
+  @@map("users")
+}
+
+model Team {
+  id             String   @id @default(uuid()) @db.Uuid
+  name           String
+  shortName      String   @db.VarChar(12)
+  logoUrl        String?
+  primaryColor   String?
+  secondaryColor String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  players     Player[]
+  matchesAsA Match[]   @relation("MatchTeamA")
+  matchesAsB Match[]   @relation("MatchTeamB")
+
+  @@map("teams")
+}
+
+model Player {
+  id           String     @id @default(uuid()) @db.Uuid
+  teamId       String     @db.Uuid
+  name         String
+  role         PlayerRole @default(BAT)
+  jerseyNumber Int?
+  createdAt    DateTime   @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@map("players")
+}
+
+model Match {
+  id              String      @id @default(uuid()) @db.Uuid
+  title           String
+  tournament      String?
+  venue           String?
+  format          MatchFormat @default(T20)
+  oversPerInnings Int?
+  startsAt        DateTime?
+  status          MatchStatus @default(SCHEDULED)
+  teamAId         String      @db.Uuid
+  teamBId         String      @db.Uuid
+  battingTeamId   String?     @db.Uuid
+  bowlingTeamId   String?     @db.Uuid
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  teamA    Team  @relation("MatchTeamA", fields: [teamAId], references: [id])
+  teamB    Team  @relation("MatchTeamB", fields: [teamBId], references: [id])
+  innings  Innings[]
+  events   ScoreEvent[]
+  commentary Commentary[]
+  clips    ReplayClip[]
+  sessions StreamSession[]
+
+  @@map("matches")
+}
+
+model Innings {
+  id               String  @id @default(uuid()) @db.Uuid
+  matchId          String  @db.Uuid
+  number           Int
+  battingTeamId    String  @db.Uuid
+  bowlingTeamId    String  @db.Uuid
+  runs             Int     @default(0)
+  wickets          Int     @default(0)
+  legalBalls       Int     @default(0)
+  wides            Int     @default(0)
+  noBalls          Int     @default(0)
+  byes             Int     @default(0)
+  legByes          Int     @default(0)
+  penalties        Int     @default(0)
+  target           Int?
+  isCompleted      Boolean @default(false)
+  strikerId        String? @db.Uuid
+  nonStrikerId     String? @db.Uuid
+  bowlerId         String? @db.Uuid
+  strikerRuns      Int     @default(0)
+  strikerBalls     Int     @default(0)
+  strikerFours     Int     @default(0)
+  strikerSixes     Int     @default(0)
+  nonStrikerRuns   Int     @default(0)
+  nonStrikerBalls  Int     @default(0)
+  nonStrikerFours  Int     @default(0)
+  nonStrikerSixes  Int     @default(0)
+  bowlerRuns       Int     @default(0)
+  bowlerBalls      Int     @default(0)
+  bowlerWickets    Int     @default(0)
+  bowlerMaidens    Int     @default(0)
+  partnershipRuns  Int     @default(0)
+  partnershipBalls Int     @default(0)
+  freeHit          Boolean @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  match Match   @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  balls Ball[]
+
+  @@unique([matchId, number])
+  @@map("innings")
+}
+
+model Ball {
+  id           String        @id @default(uuid()) @db.Uuid
+  inningsId    String        @db.Uuid
+  over         Int
+  ballInOver   Int
+  runs         Int           @default(0)
+  batterRuns   Int           @default(0)
+  extraType    ExtraType?
+  isLegal      Boolean       @default(true)
+  isWicket     Boolean       @default(false)
+  wicketKind   DismissalKind?
+  batterOutId  String?       @db.Uuid
+  strikerId    String?       @db.Uuid
+  nonStrikerId String?       @db.Uuid
+  bowlerId     String?       @db.Uuid
+  label        String        @db.VarChar(8)
+  teamRuns     Int           @default(0)
+  teamWickets  Int           @default(0)
+  createdAt    DateTime      @default(now())
+
+  innings Innings @relation(fields: [inningsId], references: [id], onDelete: Cascade)
+
+  @@index([inningsId, createdAt])
+  @@map("balls")
+}
+
+model ScoreEvent {
+  id        String         @id @default(uuid()) @db.Uuid
+  matchId   String         @db.Uuid
+  type      MatchEventType
+  headline  String
+  facts     Json
+  priority  Int            @default(50)
+  consumed  Boolean        @default(false)
+  createdAt DateTime       @default(now())
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId, createdAt])
+  @@map("score_events")
+}
+
+model Commentary {
+  id         String    @id @default(uuid()) @db.Uuid
+  matchId    String    @db.Uuid
+  language   String    @db.VarChar(8)
+  style      String    @db.VarChar(24)
+  text       String
+  eventType  MatchEventType?
+  provider   String    @default("rule-based")
+  spoken     Boolean   @default(false)
+  ttsStatus  TtsStatus @default(PENDING)
+  audioUrl   String?
+  durationMs Int?
+  createdAt  DateTime  @default(now())
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId, createdAt])
+  @@map("commentary")
+}
+
+model TtsAudio {
+  id           String   @id @default(uuid()) @db.Uuid
+  commentaryId String?  @db.Uuid
+  provider     String
+  voice        String?
+  language     String?  @db.VarChar(8)
+  text         String
+  cacheKey     String   @unique
+  filePath     String
+  format       String   @db.VarChar(8)
+  durationMs   Int?
+  sizeBytes    Int?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("tts_audio")
+}
+
+model StreamSession {
+  id               String            @id @default(uuid()) @db.Uuid
+  matchId          String?           @db.Uuid
+  startedAt        DateTime          @default(now())
+  endedAt          DateTime?
+  inputKind        InputKind
+  inputUrl         String
+  outputTarget     String
+  resolution       String            @db.VarChar(8)
+  fps              Int
+  videoBitrateKbps Int
+  audioBitrateKbps Int
+  reconnectCount   Int               @default(0)
+  lastError        String?
+  endReason        SessionEndReason?
+  bytesSent        BigInt?
+  createdAt        DateTime          @default(now())
+
+  match Match? @relation(fields: [matchId], references: [id], onDelete: SetNull)
+
+  @@index([startedAt])
+  @@map("stream_sessions")
+}
+
+model GraphicsTemplate {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String   @unique
+  description  String   @default("")
+  previewColor String   @default("#00d09c")
+  config       Json
+  isBuiltIn    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("graphics_templates")
+}
+
+model SystemLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  level     String   @db.VarChar(8)
+  source    String   @db.VarChar(24)
+  message   String
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([level])
+  @@map("system_logs")
+}
+
+model ReplayClip {
+  id              String         @id @default(uuid()) @db.Uuid
+  matchId         String         @db.Uuid
+  eventType       MatchEventType
+  filePath        String
+  durationSeconds Float          @default(0)
+  inserted        Boolean        @default(false)
+  createdAt       DateTime       @default(now())
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId, createdAt])
+  @@map("replay_clips")
+}
+
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("app_settings")
+}
+
+/// Compliance: only feeds the operator has attested rights to may be ingested.
+model AuthorizedSource {
+  id          String    @id @default(uuid()) @db.Uuid
+  kind        InputKind
+  urlPattern  String
+  rightsNote  String?
+  attestedById String?  @db.Uuid
+  attestedAt  DateTime  @default(now())
+  expiresAt   DateTime?
+  active      Boolean   @default(true)
+
+  attestedBy User? @relation(fields: [attestedById], references: [id], onDelete: SetNull)
+
+  @@map("authorized_sources")
+}

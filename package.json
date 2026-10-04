@@ -1,0 +1,36 @@
+{
+  "name": "matchcast",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MatchCast - AI-powered live match streaming & commentary platform for authorised sports broadcasts",
+  "workspaces": [
+    "shared",
+    "backend",
+    "stream-worker",
+    "graphics-worker",
+    "frontend"
+  ],
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "scripts": {
+    "build": "npm run build -w @matchcast/shared && npm run build -w @matchcast/backend && npm run build -w @matchcast/stream-worker && npm run build -w @matchcast/graphics-worker && npm run build -w @matchcast/frontend",
+    "build:shared": "npm run build -w @matchcast/shared",
+    "dev": "npm run build:shared && concurrently -n backend,stream,graphics,web -c cyan,magenta,green,yellow \"npm:dev:backend\" \"npm:dev:stream\" \"npm:dev:graphics\" \"npm:dev:web\"",
+    "dev:backend": "npm run dev -w @matchcast/backend",
+    "dev:stream": "npm run dev -w @matchcast/stream-worker",
+    "dev:graphics": "npm run dev -w @matchcast/graphics-worker",
+    "dev:web": "npm run dev -w @matchcast/frontend",
+    "typecheck": "npm run build:shared && npm run typecheck -w @matchcast/backend && npm run typecheck -w @matchcast/stream-worker && npm run typecheck -w @matchcast/graphics-worker && npm run typecheck -w @matchcast/frontend",
+    "test": "npm run build:shared && npm run test -w @matchcast/backend && npm run test -w @matchcast/stream-worker && npm run test -w @matchcast/graphics-worker",
+    "prisma:generate": "npm run prisma:generate -w @matchcast/backend",
+    "db:migrate": "npm run db:migrate -w @matchcast/backend",
+    "db:seed": "npm run db:seed -w @matchcast/backend",
+    "demo": "bash scripts/demo.sh",
+    "lint": "npm run typecheck"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "typescript": "^5.6.3"
+  }
+}

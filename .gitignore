@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+.vite/
+coverage/
+
+# Environment / secrets - never commit real .env files
+.env
+.env.*
+!.env.example
+
+# Runtime state written by the workers
+.runtime/
+data/
+logs/
+*.log
+
+# Generated demo media (recreate with `bash scripts/make-demo-asset.sh`)
+demo-assets/*.mp4
+demo-assets/*.mkv
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
