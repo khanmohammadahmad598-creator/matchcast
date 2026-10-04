@@ -99,7 +99,24 @@ export function initRealtime(httpServer: HttpServer): Server<ClientToServerEvent
 
     socket.on('subscribe', ({ rooms }) => {
       for (const r of rooms ?? []) {
-        if (r === 'dashboard' || r.startsWith('worker:')) socket.join(r);
+        // Everyone may listen to public score/graphics traffic.
+        if (r === ROOMS.DASHBOARD) {
+          socket.join(r);
+          continue;
+        }
+        // Worker rooms carry worker commands (input URLs, TTS lines, restart
+        // orders). Only an authenticated worker may join - and only its own
+        // room - so a dashboard client can never impersonate a worker.
+        if (r.startsWith('worker:')) {
+          const name = socket.data.workerName as WorkerName | undefined;
+          if (socket.data.isWorker && name && WORKER_ROOM[name] === r) socket.join(r);
+          else {
+            logger.warn('backend', 'Rejected subscribe to a worker room', {
+              socketId: socket.id,
+              room: r,
+            });
+          }
+        }
       }
     });
 

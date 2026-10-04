@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: typecheck + tests + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: matchcast
+          POSTGRES_PASSWORD: matchcast
+          POSTGRES_DB: matchcast
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://matchcast:matchcast@localhost:5432/matchcast?schema=public
+      # Redis is optional - the backend degrades to in-process state without it.
+      REDIS_ENABLED: 'false'
+      JWT_SECRET: ci-only-jwt-secret-please-ignore
+      WORKER_TOKEN: ci-only-worker-token
+      SCORING_API_KEY: ci-only-scoring-api-key
+      ALLOW_ANY_ORIGIN: 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared package
+        run: npm run build:shared
+
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+
+      - name: Apply migrations
+        run: npm run db:deploy -w @matchcast/backend
+
+      - name: Seed admin + templates
+        run: npm run db:seed -w @matchcast/backend
+
+      - name: Typecheck (all workspaces)
+        run: npm run typecheck
+
+      - name: Tests (backend, stream-worker, graphics-worker)
+        run: npm test
+
+      - name: Production build (incl. frontend bundle)
+        run: npm run build

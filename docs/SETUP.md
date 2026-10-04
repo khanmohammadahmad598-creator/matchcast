@@ -177,13 +177,14 @@ Full annotated template: [`.env.example`](../.env.example).
 
 ```bash
 npm run typecheck     # tsc --noEmit for every package
-npm test              # vitest: backend + stream-worker + graphics-worker (71 tests)
+npm test              # vitest: backend + stream-worker + graphics-worker (81 tests)
 npm run test -w @matchcast/backend         # single package
-npx vitest run src/__tests__/scoring.test.ts -w @matchcast/backend
+npx vitest run src/__tests__/realtime.test.ts -w @matchcast/backend
 ```
 
 The backend suite talks to a real PostgreSQL database (it creates and deletes its
-own fixtures), so run `npx prisma migrate deploy` first.
+own fixtures), so run `npx prisma migrate deploy` first. The stream-worker
+supervision specs additionally need `ffmpeg` on `PATH`.
 
 End-to-end smoke test against a running stack:
 
