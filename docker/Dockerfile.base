@@ -30,7 +30,11 @@ COPY frontend/package.json ./frontend/
 # Dev dependencies are installed too: the workspaces are TypeScript, so the
 # build step below needs tsc (and the Prisma CLI). They are pruned again once
 # everything is compiled, which keeps the shipped image as small as before.
-RUN npm ci --ignore-scripts || npm install --ignore-scripts
+#
+# `--include=dev` is required: NODE_ENV=production is set above, and npm skips
+# devDependencies by default in that case (which is exactly how the first
+# publish run ended up with `tsc: not found`).
+RUN npm ci --include=dev --ignore-scripts || npm install --include=dev --ignore-scripts
 
 # Full source (tsconfigs, prisma schema, src).
 COPY shared ./shared
