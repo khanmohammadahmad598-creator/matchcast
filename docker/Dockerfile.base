@@ -27,7 +27,10 @@ COPY stream-worker/package.json ./stream-worker/
 COPY graphics-worker/package.json ./graphics-worker/
 COPY frontend/package.json ./frontend/
 
-RUN npm ci --omit=dev --ignore-scripts || npm install --omit=dev --ignore-scripts
+# Dev dependencies are installed too: the workspaces are TypeScript, so the
+# build step below needs tsc (and the Prisma CLI). They are pruned again once
+# everything is compiled, which keeps the shipped image as small as before.
+RUN npm ci --ignore-scripts || npm install --ignore-scripts
 
 # Full source (tsconfigs, prisma schema, src).
 COPY shared ./shared
@@ -41,7 +44,13 @@ RUN npm run build -w @matchcast/shared \
  && npm run build -w @matchcast/stream-worker \
  && npm run build -w @matchcast/graphics-worker
 
-# Prisma client must exist at runtime; generate it against the schema.
+# Drop the build toolchain (tsc, vitest, type packages) from the shipped image.
+# `prisma` and `tsx` stay: the backend entrypoint runs `prisma migrate deploy`
+# and the seed script on every boot.
+RUN npm prune --omit=dev && npm cache clean --force
+
+# Prisma client must exist at runtime. Generated *after* the prune so nothing
+# can remove node_modules/.prisma afterwards.
 RUN npx prisma generate --schema=backend/prisma/schema.prisma
 
 RUN mkdir -p /app/.runtime/frames /app/.runtime/preview /app/.runtime/tts /app/.runtime/replay /app/.runtime/logs
