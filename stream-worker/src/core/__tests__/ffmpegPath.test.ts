@@ -1,23 +1,19 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
+import { FFMPEG_AVAILABLE, FFMPEG_SKIP_REASON } from '../../__tests__/helpers/media';
 
 /**
  * A half-working ffmpeg is worse than none: it fails deep inside a live
  * broadcast (segmented concat, audio mixing) instead of at start-up. These
  * specs pin the resolution order and the "must be able to run" check.
+ *
+ * Anything that shells out to the binary is skipped where ffmpeg is absent -
+ * see `__tests__/helpers/media.ts`.
  */
 
 const ORIGINAL = process.env.FFMPEG_PATH;
 
-const systemFfmpegWorks = (): boolean => {
-  try {
-    execFileSync('ffmpeg', ['-version'], { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-};
-const hasSystemFfmpeg = systemFfmpegWorks();
+const skipBecauseNoFfmpeg = FFMPEG_AVAILABLE ? '' : ` (${FFMPEG_SKIP_REASON})`;
 
 beforeEach(() => {
   vi.resetModules();
@@ -36,13 +32,15 @@ describe('resolveFfmpeg', () => {
     expect(resolveFfmpeg()).toBe('/opt/matchcast/bin/ffmpeg');
   });
 
-  it('prefers the system ffmpeg over the bundled static binary', async () => {
-    if (!hasSystemFfmpeg) return; // nothing to assert on a host without ffmpeg
-    const { resolveFfmpeg } = await import('../config');
-    const resolved = resolveFfmpeg();
-    expect(resolved).not.toContain('ffmpeg-static');
-    expect(execFileSync(resolved, ['-version'], { encoding: 'utf8' })).toContain('ffmpeg version');
-  });
+  it.skipIf(!FFMPEG_AVAILABLE)(
+    `prefers the system ffmpeg over the bundled static binary${skipBecauseNoFfmpeg}`,
+    async () => {
+      const { resolveFfmpeg } = await import('../config');
+      const resolved = resolveFfmpeg();
+      expect(resolved).not.toContain('ffmpeg-static');
+      expect(execFileSync(resolved, ['-version'], { encoding: 'utf8' })).toContain('ffmpeg version');
+    },
+  );
 
   it('caches the resolved binary and survives a cache reset', async () => {
     const { resolveFfmpeg, resetFfmpegCache } = await import('../config');
@@ -50,10 +48,18 @@ describe('resolveFfmpeg', () => {
     expect(resolveFfmpeg()).toBe(first); // cached: no repeated probing
 
     resetFfmpegCache();
-    const again = resolveFfmpeg();
-    expect(again).toBe(first);
-    if (hasSystemFfmpeg || !first.includes('ffmpeg-static')) {
-      expect(execFileSync(again, ['-version'], { encoding: 'utf8' })).toContain('ffmpeg version');
-    }
+    expect(resolveFfmpeg()).toBe(first);
   });
+
+  it.skipIf(!FFMPEG_AVAILABLE)(
+    `never returns a binary that cannot run${skipBecauseNoFfmpeg}`,
+    async () => {
+      const { resolveFfmpeg, resetFfmpegCache } = await import('../config');
+      resetFfmpegCache();
+      const resolved = resolveFfmpeg();
+      expect(execFileSync(resolved, ['-hide_banner', '-version'], { encoding: 'utf8' })).toContain(
+        'ffmpeg version',
+      );
+    },
+  );
 });

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
+import { FFMPEG_AVAILABLE, FFMPEG_SKIP_REASON } from '../../__tests__/helpers/media';
 
 import { resolveFfmpeg } from '../../core/config';
 import { detectEncoder } from '../encoder';
@@ -52,15 +53,20 @@ describe('encoder detection', () => {
     });
   });
 
-  it('never selects an encoder that cannot encode a frame on this host', async () => {
+  it.skipIf(!FFMPEG_AVAILABLE)(
+    FFMPEG_AVAILABLE
+      ? 'never selects an encoder that cannot encode a frame on this host'
+      : `never selects an encoder that cannot encode a frame on this host (${FFMPEG_SKIP_REASON})`,
+    async () => {
     process.env.HW_ACCEL = 'auto';
     const { detectEncoder: detect } = await import('../encoder');
     const choice = await detect();
 
-    expect(['libx264', 'h264_nvenc', 'h264_vaapi', 'h264_qsv']).toContain(choice.videoEncoder);
-    // The invariant that matters: whatever it picked, it actually works here.
-    expect(canEncode(choice.videoEncoder)).toBe(true);
-  });
+      expect(['libx264', 'h264_nvenc', 'h264_vaapi', 'h264_qsv']).toContain(choice.videoEncoder);
+      // The invariant that matters: whatever it picked, it actually works here.
+      expect(canEncode(choice.videoEncoder)).toBe(true);
+    },
+  );
 
   it('degrades to CPU instead of choosing a forced but broken hardware encoder', async () => {
     process.env.HW_ACCEL = 'nvidia';
@@ -70,6 +76,20 @@ describe('encoder detection', () => {
     if (canEncode('h264_nvenc')) expect(choice.videoEncoder).toBe('h264_nvenc');
     else expect(choice.videoEncoder).toBe('libx264'); // no NVIDIA driver here
   });
+
+  it.skipIf(FFMPEG_AVAILABLE)(
+    'still returns a safe CPU default when ffmpeg itself is missing',
+    async () => {
+      process.env.HW_ACCEL = 'auto';
+      const { detectEncoder: detect } = await import('../encoder');
+      // No ffmpeg at all: detection must resolve (not throw) with the CPU encoder.
+      await expect(detect()).resolves.toEqual({
+        videoEncoder: 'libx264',
+        hwAccel: 'off',
+        preset: 'veryfast',
+      });
+    },
+  );
 
   it('caches the choice for the life of the process', async () => {
     process.env.HW_ACCEL = 'auto';

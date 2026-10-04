@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
+import { FFMPEG_AVAILABLE, FFMPEG_SKIP_REASON } from '../../__tests__/helpers/media';
 import { ReplayBuffer, atempoChain } from '../ReplayBuffer';
 import type { BackendClient } from '../../core/backendClient';
 import type { MatchEvent, ReplaySettings } from '@matchcast/shared';
@@ -90,11 +91,12 @@ function seedSegments(count = 3): void {
 }
 
 beforeAll(() => {
+  if (!FFMPEG_AVAILABLE) return;
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'matchcast-replay-'));
   seedSegments(3);
 });
-
 afterAll(() => {
+  if (!FFMPEG_AVAILABLE) return; // beforeAll never created the fixture dir
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -117,7 +119,7 @@ describe('atempoChain', () => {
   });
 });
 
-describe('ReplayBuffer', () => {
+describe.skipIf(!FFMPEG_AVAILABLE)(FFMPEG_AVAILABLE ? 'ReplayBuffer' : `ReplayBuffer (${FFMPEG_SKIP_REASON})`, () => {
   it('ignores events while the buffer is disabled', () => {
     const buffer = new ReplayBuffer(backend, dir);
     buffer.updateSettings(SETTINGS({ enabled: false }));
