@@ -1,8 +1,10 @@
 # MatchCast — AI Live Match Streaming & Commentary Platform
 
 [![CI](https://github.com/khanmohammadahmad598-creator/matchcast/actions/workflows/ci.yml/badge.svg)](https://github.com/khanmohammadahmad598-creator/matchcast/actions/workflows/ci.yml)
+[![Publish images](https://github.com/khanmohammadahmad598-creator/matchcast/actions/workflows/publish.yml/badge.svg)](https://github.com/khanmohammadahmad598-creator/matchcast/actions/workflows/publish.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-107%20passing-brightgreen.svg)](#testing)
+[![Images](https://img.shields.io/badge/ghcr.io-5%20images-blue.svg)](https://github.com/khanmohammadahmad598-creator?tab=packages)
 
 Broadcast **your own** sports production to YouTube Live with an automatic
 scoreboard, AI commentary in Hindi/Hinglish/English, text-to-speech voiceover
@@ -79,8 +81,17 @@ server — see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) §2.1):
 curl -fsSL https://raw.githubusercontent.com/khanmohammadahmad598-creator/matchcast/main/scripts/deploy-vps.sh | bash
 ```
 
-Every push to `main` publishes `ghcr.io/khanmohammadahmad598-creator/matchcast-{backend,stream-worker,graphics-worker,frontend}`
-(`main`, `sha-<short>`, `latest`), verified by the **Publish images** workflow.
+Every push to `main` publishes five images to GitHub Container Registry
+(`main`, `sha-<short>`, `latest`; pullable anonymously), verified by the
+**Publish images** workflow:
+
+| Image | Runs |
+|---|---|
+| `ghcr.io/khanmohammadahmad598-creator/matchcast-frontend` | nginx + dashboard bundle |
+| `ghcr.io/khanmohammadahmad598-creator/matchcast-backend` | API, Socket.IO, audio mixer |
+| `ghcr.io/khanmohammadahmad598-creator/matchcast-stream-worker` | ffmpeg pipeline, replay buffer |
+| `ghcr.io/khanmohammadahmad598-creator/matchcast-graphics-worker` | scoreboard renderer |
+| `ghcr.io/khanmohammadahmad598-creator/matchcast-base` | shared Node + ffmpeg base |
 
 ---
 
