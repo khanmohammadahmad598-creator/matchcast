@@ -61,6 +61,22 @@ if [ -n "$MATCH_ID" ]; then
     -H 'content-type: application/json' -d '{}' > /dev/null || true
 fi
 
+# ------------------------------------------- 5b. register the demo clip
+# The stream refuses to start until the operator attests that they hold the
+# rights to the feed (spec §20). The demo clip is generated locally by
+# scripts/make-demo-asset.sh, so the attestation is recorded here.
+echo "[demo] Registering the local demo clip as an authorised input"
+curl -s -X PUT "$API/api/stream/input" \
+  -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d "{\"kind\":\"demo\",\"url\":\"file://$ROOT/demo-assets/demo-match.mp4\",\"lowLatency\":true,\"rightsAttested\":true,\"rightsNote\":\"Synthetic clip generated locally by scripts/make-demo-asset.sh - no third-party content\"}" \
+  | python3 -c 'import sys,json
+try:
+    d=json.load(sys.stdin)
+    i=d.get("input", d)
+    print("[demo] input:", i.get("kind"), "| rightsAttested:", i.get("rightsAttested"), "| url:", i.get("url"))
+except Exception as e: print("[demo] input registered")'
+
 # ------------------------------------------------------------- 6. go live
 echo "[demo] Starting the broadcast -> $RTMP_SINK"
 curl -s -X POST "$API/api/stream/start" -H "authorization: Bearer $TOKEN" || true
