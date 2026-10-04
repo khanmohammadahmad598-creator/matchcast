@@ -94,15 +94,60 @@ export function redactStreamKey(text: string): string {
   return out.replace(/(rtmps?:\/\/\S*)\/[A-Za-z0-9._-]{8,}(?=\s|$)/g, '$1/<redacted-stream-key>');
 }
 
-/** Resolve the ffmpeg binary: env -> ffmpeg-static (dev) -> PATH. */
-export function resolveFfmpeg(): string {
-  if (config.FFMPEG_PATH && config.FFMPEG_PATH !== 'ffmpeg') return config.FFMPEG_PATH;
+/**
+ * Resolves a *working* ffmpeg binary, in order:
+ *   1. `FFMPEG_PATH` from the environment (the operator's explicit choice)
+ *   2. the system `ffmpeg` on PATH (the apt/dnf package - always preferred:
+ *      it is built against the host libraries and supports the encoders we probe)
+ *   3. the bundled `ffmpeg-static` dev dependency (last-resort fallback)
+ *
+ * A bundled binary that cannot even answer `-version` is skipped, because a
+ * half-working ffmpeg is worse than none: it fails deep inside a live broadcast
+ * instead of at start-up. The result is cached - every caller spawns ffmpeg.
+ */
+let resolvedFfmpeg: string | null = null;
+
+function ffmpegStaticPath(): string | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const p = require('ffmpeg-static') as string | null;
-    if (p && fs.existsSync(p)) return p;
+    return p && fs.existsSync(p) ? p : null;
   } catch {
-    /* optional dev dependency */
+    return null; // optional dev dependency
   }
-  return 'ffmpeg';
+}
+
+function canRun(binary: string): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { execFileSync } = require('node:child_process') as typeof import('node:child_process');
+    execFileSync(binary, ['-version'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function resolveFfmpeg(): string {
+  if (resolvedFfmpeg) return resolvedFfmpeg;
+
+  if (config.FFMPEG_PATH && config.FFMPEG_PATH !== 'ffmpeg') {
+    resolvedFfmpeg = config.FFMPEG_PATH;
+    return resolvedFfmpeg;
+  }
+
+  for (const candidate of ['ffmpeg', ffmpegStaticPath()]) {
+    if (candidate && canRun(candidate)) {
+      resolvedFfmpeg = candidate;
+      return resolvedFfmpeg;
+    }
+  }
+
+  resolvedFfmpeg = 'ffmpeg';
+  return resolvedFfmpeg;
+}
+
+/** Test helper: forget the cached binary (used when FFMPEG_PATH changes). */
+export function resetFfmpegCache(): void {
+  resolvedFfmpeg = null;
 }

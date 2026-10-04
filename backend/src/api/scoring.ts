@@ -3,6 +3,7 @@ import { prisma } from '../db/prisma';
 import { requireAuth, requireRole, requireScoringAccess } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { realtime } from '../realtime/io';
+import { maybeCaptureReplay } from '../services/streamService';
 import {
   addBall,
   applyScoreUpdate,
@@ -13,6 +14,7 @@ import {
   startNextInnings,
   undoLastBall,
 } from '../services/matchService';
+import type { MatchEvent } from '@matchcast/shared';
 import { ballInputSchema, manualEventSchema, scoreUpdateSchema, uid } from '@matchcast/shared';
 
 export const scoringRouter: Router = Router();
@@ -21,7 +23,11 @@ export const scoringRouter: Router = Router();
 async function broadcast(matchId: string, events: unknown[]) {
   const snapshot = await getSnapshot(matchId);
   if (snapshot) realtime.score(snapshot);
-  for (const e of events ?? []) realtime.matchEvent(e);
+  for (const e of events ?? []) {
+    realtime.matchEvent(e);
+    // Sixes, fours, wickets and milestones feed the optional replay buffer.
+    void maybeCaptureReplay(e as MatchEvent);
+  }
   return snapshot;
 }
 

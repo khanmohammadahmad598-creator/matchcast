@@ -94,15 +94,19 @@ export class ReplayBuffer {
       };
       logger.info('system', `Replay clip ready: ${path.basename(outFile)} (${duration.toFixed(1)}s)`);
 
+      // Report whether this clip will actually go to air, so the dashboard and
+      // the audit trail can tell "archived" from "broadcast".
+      const inserted = this.settings.mode === 'cut' && this.isHealthy();
+
       void this.backend.createReplayClip({
         matchId: event.matchId,
         eventType: event.type,
         filePath: outFile,
         durationSeconds: duration,
-        inserted: false,
+        inserted,
       });
 
-      if (this.settings.mode === 'cut' && this.isHealthy()) {
+      if (inserted) {
         this.onClipReady?.(clip);
       }
     } catch (err) {

@@ -284,3 +284,70 @@ describe('realtime: workers and command routing', () => {
     expect(realtime.isWorkerOnline('stream-worker')).toBe(true);
   });
 });
+
+describe('realtime: replay capture triggers', () => {
+  const setReplay = (body: Record<string, unknown>) =>
+    request(app).put('/api/stream/replay').set('authorization', `Bearer ${token}`).send(body);
+
+  // Replay settings live in the shared app_settings row, so restore whatever
+  // was configured before this suite ran.
+  let original: Record<string, unknown> | undefined;
+
+  beforeAll(async () => {
+    const res = await request(app).get('/api/stream/replay').set('authorization', `Bearer ${token}`);
+    original = res.body?.replay as Record<string, unknown> | undefined;
+  });
+
+  afterAll(async () => {
+    if (original) await setReplay(original);
+  });
+
+  it('does not capture anything while the replay buffer is disabled', async () => {
+    const worker = await connect({ token: config.WORKER_TOKEN, name: 'stream-worker' });
+    await waitUntil(() => realtime.isWorkerOnline('stream-worker'));
+
+    const put = await setReplay({ enabled: false, mode: 'off', triggerEvents: ['SIX'] });
+    expect(put.status).toBe(200);
+
+    let captures = 0;
+    worker.on(EV.WORKER_COMMAND, (cmd) => {
+      if (cmd.type === 'replay:capture') captures += 1;
+    });
+
+    const res = await post(`/api/match/${matchId}/ball`, { runs: 6 });
+    expect(res.status).toBe(201);
+    await sleep(300);
+    expect(captures).toBe(0);
+  });
+
+  it('asks the stream-worker to capture a SIX when replays are enabled', async () => {
+    const worker = await connect({ token: config.WORKER_TOKEN, name: 'stream-worker' });
+    await waitUntil(() => realtime.isWorkerOnline('stream-worker'));
+
+    const put = await setReplay({
+      enabled: true,
+      mode: 'off',
+      preRollSeconds: 4,
+      postRollSeconds: 1, // schema minimum; the worker waits this long before cutting the clip
+      playbackRate: 0.6,
+      maxLatencySeconds: 6,
+      triggerEvents: ['SIX'],
+    });
+    expect(put.status).toBe(200);
+
+    const pending = waitFor<WorkerCommand>(
+      worker,
+      EV.WORKER_COMMAND,
+      (c) => c.type === 'replay:capture',
+      10_000,
+    );
+    const res = await post(`/api/match/${matchId}/ball`, { runs: 6 });
+    expect(res.status).toBe(201);
+
+    const cmd = await pending;
+    expect(cmd.type).toBe('replay:capture');
+    if (cmd.type === 'replay:capture') {
+      expect(cmd.payload.event.type).toBe('SIX');
+    }
+  });
+});

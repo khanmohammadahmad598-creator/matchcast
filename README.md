@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/khanmohammadahmad598-creator/matchcast/actions/workflows/ci.yml/badge.svg)](https://github.com/khanmohammadahmad598-creator/matchcast/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-86%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-105%20passing-brightgreen.svg)](#testing)
 
 Broadcast **your own** sports production to YouTube Live with an automatic
 scoreboard, AI commentary in Hindi/Hinglish/English, text-to-speech voiceover
@@ -31,7 +31,7 @@ score events ──▶ AI commentary ─▶ Hindi/Hinglish TTS ─▶ audio mix 
 | 4 | **AI commentary** | Hindi / Hinglish / English; professional, excited, calm, fast, expert styles. Never invents events: every line is generated from real scoring facts. Anti-repetition window + cooldown + priority gating |
 | 5 | **TTS layer** | Provider abstraction (OpenAI, ElevenLabs, Google, offline mock), male/female voices, Hindi/English/Hinglish, speed/volume/pitch, sequential queue so lines never overlap |
 | 6 | **Audio mixer** | Original feed + commentary + optional background bed, per-bus volume, mute, sidechain ducking of the feed while commentary speaks, limiter. No bundled music |
-| 7 | **Replay buffer** | Rolling segments for sixes/fours/wickets/milestones with pre/post roll, slow-mo playback rate and archive-only mode (zero added latency) |
+| 7 | **Replay buffer** | Rolling segments for sixes/fours/wickets/milestones with pre/post roll, slow-mo playback rate and archive-only mode (zero added latency)  See [`docs/REPLAYS.md`](docs/REPLAYS.md) |
 | 8 | **Graphics engine** | Template system (Modern / Classic / Minimal), team logos, player names, match title, tournament, sponsor banner, lower thirds, flash graphics, intro/outro, LIVE badge — hot-swappable live |
 | 9 | **YouTube output** | RTMP(S) ingest, stream key read from env only, masked in logs, never returned by any API. Start / stop / restart / reconnect with status, bitrate, FPS and error reporting |
 | 10 | **Dashboard** | React + Tailwind: Dashboard, Match Control, Commentary, Graphics, Streaming, System Logs — responsive and realtime |
@@ -42,7 +42,7 @@ score events ──▶ AI commentary ─▶ Hindi/Hinglish TTS ─▶ audio mix 
 | 15 | **Stack** | React + TS + Tailwind · Node + TS + Express · Socket.IO · PostgreSQL + Prisma · FFmpeg · provider abstractions · Docker Compose |
 | 16 | **Docker** | 6 services: frontend, backend, postgres, redis, stream-worker, graphics-worker |
 | 17 | **Repo layout** | `/frontend /backend /stream-worker /graphics-worker /shared /docker /scripts /docs` + `.env.example`, Dockerfiles, compose file, migrations, API docs |
-| 18 | **Tests** | 86 vitest specs: scoring, commentary, TTS queue, ffmpeg args + restart/backoff, YouTube target masking, auth/RBAC, API validation, graphics templates, **realtime Socket.IO delivery + worker command routing** |
+| 18 | **Tests** | 105 vitest specs: scoring, commentary, TTS queue, ffmpeg args + restart/backoff, YouTube target masking, auth/RBAC, API validation, graphics templates, **realtime Socket.IO delivery, worker command routing, replay buffer, encoder detection** |
 | 19 | **Demo mode** | Synthetic locally generated match clip + scripted deliveries → commentary + TTS + scoreboard + RTMP output, no third-party content |
 
 ---
@@ -195,7 +195,7 @@ Everything is documented in [`.env.example`](.env.example) and
 
 ```bash
 npm run typecheck           # tsc --noEmit, all 5 packages
-npm test                    # 86 vitest specs (backend 41, stream-worker 39, graphics 6)
+npm test                    # 105 vitest specs (backend 43, stream-worker 56, graphics 6)
 bash scripts/demo.sh        # full end-to-end demo against a running stack
 ```
 

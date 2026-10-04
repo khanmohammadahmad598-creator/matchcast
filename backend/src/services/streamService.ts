@@ -6,6 +6,7 @@ import type {
   AudioMixSettings,
   GraphicsSettings,
   InputStatus,
+  MatchEvent,
   ReplaySettings,
   StreamStatus,
   TtsSettings,
@@ -279,4 +280,32 @@ export function speakText(text: string, language?: string, priority = 80): boole
 
 export function flashGraphic(title: string, subtitle?: string, ms?: number): boolean {
   return realtime.command('graphics-worker', { type: 'graphics:flash', payload: { title, subtitle, ms } });
+}
+
+/**
+ * Trigger a rolling-buffer capture for a real scoring event.
+ *
+ * The control plane owns the operator's trigger list and knows whether the
+ * stream-worker is online, so it decides *when* a capture happens; the worker
+ * decides *how* (segment ring, slow motion, cut/insert). Capture is also
+ * requested when `mode === 'off'` - that mode archives clips without ever
+ * interrupting the live feed, which costs no added latency.
+ */
+export async function maybeCaptureReplay(event: MatchEvent): Promise<boolean> {
+  try {
+    const replay = await settings.replay();
+    if (!replay.enabled) return false;
+    if (!replay.triggerEvents.includes(event.type)) return false;
+
+    const sent = realtime.command('stream-worker', { type: 'replay:capture', payload: { event } });
+    if (!sent) {
+      logger.debug('system', `Replay trigger ${event.type} skipped - stream-worker offline`);
+    } else {
+      logger.info('system', `Replay capture requested for ${event.type}`);
+    }
+    return sent;
+  } catch (err) {
+    logger.warn('system', 'Replay trigger failed', { error: (err as Error).message });
+    return false;
+  }
 }
