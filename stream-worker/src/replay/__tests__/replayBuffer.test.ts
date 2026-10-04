@@ -189,6 +189,30 @@ describe.skipIf(!FFMPEG_AVAILABLE)(FFMPEG_AVAILABLE ? 'ReplayBuffer' : `ReplayBu
     expect(ready).toHaveLength(0);
   });
 
+  it('skips the segment the ring is still writing (partial file breaks the concat)', async () => {
+    created.length = 0;
+
+    // The newest segment exists but is empty and was touched a moment ago -
+    // exactly what the live ring looks like while ffmpeg is appending to it.
+    const inFlight = path.join(dir, 'seg_999.ts');
+    fs.writeFileSync(inFlight, '');
+
+    const buffer = new ReplayBuffer(backend, dir);
+    buffer.setSegmentSeconds(1);
+    buffer.updateSettings(SETTINGS());
+
+    expect(buffer.onEvent(event('SIX', 'clip-5'))).toBe(true);
+    await waitFor(() => created.length > 0);
+
+    // A clip was still produced (from the finished segments) instead of the
+    // capture failing with "replay concat failed".
+    expect(created[0].eventType).toBe('SIX');
+    expect(created[0].durationSeconds).toBeGreaterThan(0);
+    expect(fs.existsSync(created[0].filePath)).toBe(true);
+    fs.rmSync(created[0].filePath, { force: true });
+    fs.rmSync(inFlight, { force: true });
+  });
+
   it('degrades gracefully when the ring is still empty (no clip, no crash)', async () => {
     const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'matchcast-replay-empty-'));
     created.length = 0;

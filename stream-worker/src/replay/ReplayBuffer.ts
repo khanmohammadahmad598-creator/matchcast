@@ -116,15 +116,34 @@ export class ReplayBuffer {
     }
   }
 
-  /** Most recent segments covering roughly `windowSeconds`, oldest first. */
+  /**
+   * Most recent *complete* segments covering roughly `windowSeconds`, oldest
+   * first.
+   *
+   * The ring writer always has one segment open: it exists on disk but is still
+   * being appended to (and is 0 bytes for the first frames). Concatenating that
+   * partial file makes ffmpeg abort, so it is skipped here - an extra candidate
+   * is taken to compensate, and only if nothing else is available do we use it.
+   */
   private latestSegments(windowSeconds: number): string[] {
     const files = fs
       .readdirSync(this.dir)
       .filter((f) => /^seg_\d+\.ts$/.test(f))
-      .map((f) => ({ name: f, mtime: fs.statSync(path.join(this.dir, f)).mtimeMs }))
+      .map((f) => {
+        const full = path.join(this.dir, f);
+        const st = fs.statSync(full);
+        return { full, mtime: st.mtimeMs, size: st.size };
+      })
       .sort((a, b) => a.mtime - b.mtime);
-    const count = Math.max(1, Math.ceil(windowSeconds / this.segmentSeconds));
-    return files.slice(-count).map((f) => path.join(this.dir, f.name));
+
+    const want = Math.max(1, Math.ceil(windowSeconds / this.segmentSeconds));
+    const candidates = files.slice(-(want + 1));
+
+    const now = Date.now();
+    const finished = candidates.filter((f) => f.size > 0 && now - f.mtime > 1_000);
+    const usable = finished.length ? finished : candidates.filter((f) => f.size > 0);
+
+    return usable.slice(-want).map((f) => f.full);
   }
 
   /** Concatenates segments, applying slow motion, and returns the clip duration. */

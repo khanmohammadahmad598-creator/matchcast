@@ -177,7 +177,7 @@ Full annotated template: [`.env.example`](../.env.example).
 
 ```bash
 npm run typecheck     # tsc --noEmit for every package
-npm test              # vitest: backend + stream-worker + graphics-worker (107 tests)
+npm test              # vitest: backend + stream-worker + graphics-worker (108 tests)
 npm run test -w @matchcast/backend         # single package
 npx vitest run src/__tests__/realtime.test.ts -w @matchcast/backend
 ```
