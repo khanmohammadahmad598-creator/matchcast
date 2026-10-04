@@ -42,6 +42,11 @@ COPY backend ./backend
 COPY stream-worker ./stream-worker
 COPY graphics-worker ./graphics-worker
 
+# The Prisma client has to exist *before* the TypeScript build: the backend
+# imports its generated types, and without them every Prisma model degrades to
+# `any` and `tsc` fails with TS7006 under noImplicitAny.
+RUN npx prisma generate --schema=backend/prisma/schema.prisma
+
 # Build the shared types package first, then every service.
 RUN npm run build -w @matchcast/shared \
  && npm run build -w @matchcast/backend \
@@ -53,8 +58,8 @@ RUN npm run build -w @matchcast/shared \
 # and the seed script on every boot.
 RUN npm prune --omit=dev && npm cache clean --force
 
-# Prisma client must exist at runtime. Generated *after* the prune so nothing
-# can remove node_modules/.prisma afterwards.
+# Regenerated after the prune as well: the runtime client has to be present in
+# the final (production-only) dependency tree.
 RUN npx prisma generate --schema=backend/prisma/schema.prisma
 
 RUN mkdir -p /app/.runtime/frames /app/.runtime/preview /app/.runtime/tts /app/.runtime/replay /app/.runtime/logs
