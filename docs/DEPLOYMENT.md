@@ -111,6 +111,83 @@ Then open `.env` and set the operational values:
 
 ---
 
+## 2.1 Deploy the published images (no build on the server)
+
+Every push to `main` builds and publishes the production images to GitHub
+Container Registry (`.github/workflows/publish.yml`, using the built-in
+`GITHUB_TOKEN` — no registry account needed):
+
+| Image | Contents | Tags |
+|---|---|---|
+| `matchcast-base` | Node 20 + ffmpeg + fonts + built workspace | `main`, `sha-<short>`, `latest`, `vX.Y.Z` |
+| `matchcast-backend` | API, Socket.IO, audio mixer, migrations | same |
+| `matchcast-stream-worker` | ffmpeg pipeline, replay buffer, TTS playback | same |
+| `matchcast-graphics-worker` | scoreboard renderer | same |
+| `matchcast-frontend` | nginx serving the dashboard build | same |
+
+They live under `ghcr.io/khanmohammadahmad598-creator/matchcast-*`.
+
+### One command on a fresh VPS
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/khanmohammadahmad598-creator/matchcast/main/scripts/deploy-vps.sh | bash
+```
+
+The script checks Docker, stages `docker-compose.yml` + `docker-compose.prod.yml`
++ `docker-compose.deploy.yml` in `/opt/matchcast`, generates `.env` with random
+`JWT_SECRET` / `WORKER_TOKEN`, pulls the images, starts the stack and waits for
+`/api/health`.
+
+### Or by hand
+
+```bash
+mkdir -p /opt/matchcast && cd /opt/matchcast
+for f in docker-compose.yml docker-compose.prod.yml docker-compose.deploy.yml .env.example; do
+  curl -fsSLO "https://raw.githubusercontent.com/khanmohammadahmad598-creator/matchcast/main/$f"
+done
+cp .env.example .env && $EDITOR .env          # JWT_SECRET, WORKER_TOKEN, passwords
+
+export IMAGE_REPO=ghcr.io/khanmohammadahmad598-creator/matchcast TAG=main
+docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.deploy.yml pull
+docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.deploy.yml up -d
+```
+
+`docker-compose.deploy.yml` only overrides the `image:` of each service — every
+other setting still comes from the base and prod files, so there is a single
+place to change configuration. Because `build:` stays in the merged config, a
+host without the images (and with the source checked out) still falls back to
+building locally.
+
+### Pinning and rolling back
+
+```bash
+TAG=sha-1a2b3c4 ./scripts/deploy-vps.sh     # pin an exact build
+TAG=v1.2.0      ./scripts/deploy-vps.sh     # pin a release
+```
+
+Always pull a tag, never `latest`, if you want reproducible rollbacks.
+
+### Push-to-deploy (optional)
+
+Add these to **Settings → Secrets and variables → Actions** and every successful
+publish SSHes into the box and runs the compose pull/up for you:
+
+| Secret / variable | Value |
+|---|---|
+| `SSH_HOST` | VPS IP or hostname |
+| `SSH_USER` | e.g. `deploy` (needs to be in the `docker` group) |
+| `SSH_KEY` | private key (ed25519) whose public half is in `~/.ssh/authorized_keys` |
+| `DEPLOY_PATH` (variable, optional) | stack directory, default `/opt/matchcast` |
+
+Without them the workflow simply skips the deploy step and prints a notice —
+the images are published either way.
+
+> If the ghcr packages are private, log in once on the server
+> (`docker login ghcr.io -u <user> -p <PAT with read:packages>`) or set
+> `GHCR_TOKEN` for `deploy-vps.sh`.
+
+---
+
 ## 3. Build and start
 
 ```bash
@@ -397,6 +474,16 @@ docker compose logs -f backend | grep -i migrate
 
 Roll back by `git checkout <previous-tag>` and repeating the same two commands —
 schema migrations are forward-only, so keep database backups before upgrading.
+
+**If you deploy from the published images** (§2.1), updating is just:
+
+```bash
+cd /opt/matchcast
+docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.deploy.yml pull
+docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.deploy.yml up -d
+```
+
+No git checkout, no build, no npm — the new image is already on ghcr.io.
 
 ---
 

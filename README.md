@@ -64,13 +64,23 @@ Open http://localhost:5173 → login `admin@matchcast.local` / `ChangeMeNow123!`
 
 Detailed instructions: [`docs/SETUP.md`](docs/SETUP.md) · [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
-Docker:
+Docker (local build):
 
 ```bash
 cp .env.example .env
 docker build -t matchcast/base:latest -f docker/Dockerfile.base .
 docker compose up -d --build
 ```
+
+Docker on a VPS (prebuilt images published by GitHub Actions, no build on the
+server — see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) §2.1):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/khanmohammadahmad598-creator/matchcast/main/scripts/deploy-vps.sh | bash
+```
+
+Every push to `main` publishes `ghcr.io/khanmohammadahmad598-creator/matchcast-{backend,stream-worker,graphics-worker,frontend}`
+(`main`, `sha-<short>`, `latest`), verified by the **Publish images** workflow.
 
 ---
 

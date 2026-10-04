@@ -1,0 +1,38 @@
+# ---------------------------------------------------------------------------
+# Deploy layer: run the images GitHub Actions published to ghcr.io instead of
+# building them on the server.
+#
+#   docker login ghcr.io            # only needed while the packages are private
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+#                  -f docker-compose.deploy.yml pull
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+#                  -f docker-compose.deploy.yml up -d
+#
+# `scripts/deploy-vps.sh` wraps exactly that. It layers on top of the base and
+# prod files, so it only overrides the image each service runs - everything
+# else (env, volumes, health checks, proxy ports) stays in one place.
+#
+# Overrides:
+#   IMAGE_REPO  image namespace           (default ghcr.io/khanmohammadahmad598-creator/matchcast)
+#   TAG         image tag to run          (default main; use sha-<short> to pin)
+# ---------------------------------------------------------------------------
+
+services:
+  backend:
+    # `build:` from docker-compose.yml stays in the merged config on purpose:
+    # Compose only builds when the image is missing locally, so `docker compose
+    # pull` followed by `up -d` always runs the published image.
+    image: ${IMAGE_REPO:-ghcr.io/khanmohammadahmad598-creator/matchcast}-backend:${TAG:-main}
+    pull_policy: always
+
+  stream-worker:
+    image: ${IMAGE_REPO:-ghcr.io/khanmohammadahmad598-creator/matchcast}-stream-worker:${TAG:-main}
+    pull_policy: always
+
+  graphics-worker:
+    image: ${IMAGE_REPO:-ghcr.io/khanmohammadahmad598-creator/matchcast}-graphics-worker:${TAG:-main}
+    pull_policy: always
+
+  frontend:
+    image: ${IMAGE_REPO:-ghcr.io/khanmohammadahmad598-creator/matchcast}-frontend:${TAG:-main}
+    pull_policy: always

@@ -1,0 +1,199 @@
+# ---------------------------------------------------------------------------
+# Publish production container images to GitHub Container Registry (ghcr.io).
+#
+# No third-party registry, no extra tokens: this workflow uses the built-in
+# GITHUB_TOKEN, so images are published on every push to main. Point a VPS at
+# them with `docker-compose.deploy.yml` (see docs/DEPLOYMENT.md §6), or set the
+# SSH_* secrets to have GitHub deploy for you on every push.
+#
+#   ghcr.io/<owner>/matchcast-base            shared Node + ffmpeg base
+#   ghcr.io/<owner>/matchcast-backend         API + Socket.IO + mixer
+#   ghcr.io/<owner>/matchcast-stream-worker   ffmpeg pipeline + replay
+#   ghcr.io/<owner>/matchcast-graphics-worker scoreboard renderer
+#   ghcr.io/<owner>/matchcast-frontend        nginx serving the dashboard
+#
+# Tags: branch name (main), sha-<short>, latest (default branch only),
+#       plus semver tags on a GitHub Release.
+# ---------------------------------------------------------------------------
+
+name: Publish images
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  base:
+    name: base image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.ref.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Registry owner (lowercase)
+        id: owner
+        run: echo "name=$(printf '%s' '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ${{ env.REGISTRY }}/${{ steps.owner.outputs.name }}/matchcast-base
+          tags: |
+            type=ref,event=branch
+            type=sha,format=short
+            type=semver,pattern={{version}},enable=${{ github.event_name == 'release' }}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.base
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=base
+          cache-to: type=gha,mode=max,scope=base
+
+      # The app images must be built FROM exactly this image, so pin the digest
+      # tag rather than "main" (which another push could move mid-run).
+      - name: Pin the base reference
+        id: ref
+        run: |
+          image="${REGISTRY}/${OWNER}/matchcast-base:sha-$(git rev-parse --short HEAD)"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "Building app images FROM $image"
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          OWNER: ${{ steps.owner.outputs.name }}
+
+  apps:
+    name: ${{ matrix.service }}
+    needs: base
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: backend
+            dockerfile: docker/Dockerfile.backend
+          - service: stream-worker
+            dockerfile: docker/Dockerfile.stream-worker
+          - service: graphics-worker
+            dockerfile: docker/Dockerfile.graphics-worker
+          - service: frontend
+            dockerfile: docker/Dockerfile.frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Registry owner (lowercase)
+        id: owner
+        run: echo "name=$(printf '%s' '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ${{ env.REGISTRY }}/${{ steps.owner.outputs.name }}/matchcast-${{ matrix.service }}
+          tags: |
+            type=ref,event=branch
+            type=sha,format=short
+            type=semver,pattern={{version}},enable=${{ github.event_name == 'release' }}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BASE_IMAGE=${{ needs.base.outputs.image }}
+            VITE_API_BASE=/api
+            VITE_PREVIEW_TOKEN=preview
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  # A broken compose file is only discovered at deploy time unless we check it
+  # here, so merge the three files exactly the way the VPS will.
+  compose-check:
+    name: compose files merge
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: docker compose config
+        env:
+          TAG: main
+          IMAGE_REPO: ghcr.io/${{ github.repository_owner }}/matchcast
+          JWT_SECRET: compose-check-only
+          WORKER_TOKEN: compose-check-only
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.deploy.yml config > /dev/null
+          echo "docker-compose.yml + prod + deploy merge cleanly"
+
+  # Optional push-to-deploy. Runs only once SSH_* secrets exist, and tells you
+  # how to enable it otherwise - the images are published either way.
+  deploy:
+    name: deploy to VPS
+    needs: apps
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_HOST: ${{ secrets.SSH_HOST }}
+      DEPLOY_USER: ${{ secrets.SSH_USER }}
+      DEPLOY_KEY: ${{ secrets.SSH_KEY }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+    steps:
+      - name: Deploy over SSH
+        if: env.DEPLOY_HOST != ''
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+          SSH="ssh -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts -o StrictHostKeyChecking=yes"
+          path="${DEPLOY_PATH:-/opt/matchcast}"
+          $SSH "$DEPLOY_USER@$DEPLOY_HOST" \
+            "cd '$path' && docker compose pull && docker compose up -d --remove-orphans && docker compose ps"
+
+      - name: Push-to-deploy is not configured
+        if: env.DEPLOY_HOST == ''
+        run: |
+          echo "::notice title=Push-to-deploy inactive::Images published to ghcr.io. To deploy on every push add the repository secrets SSH_HOST / SSH_USER / SSH_KEY (and optionally the DEPLOY_PATH variable), then re-run this workflow - see docs/DEPLOYMENT.md §6."

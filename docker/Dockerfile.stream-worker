@@ -1,4 +1,8 @@
-FROM matchcast/base:latest
+# The base image can be swapped at build time (CI builds it once and publishes
+# it to ghcr.io); local builds keep using the locally built
+# `docker build -t matchcast/base:latest -f docker/Dockerfile.base .` image.
+ARG BASE_IMAGE=matchcast/base:latest
+FROM ${BASE_IMAGE}
 
 ENV NODE_ENV=production
 
