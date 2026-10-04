@@ -6,8 +6,16 @@ FROM ${BASE_IMAGE}
 
 ENV NODE_ENV=production
 
-# The stream-worker needs the demo asset and a writable runtime directory.
-COPY demo-assets /app/demo-assets
+# The demo feed is generated locally (scripts/make-demo-asset.sh) and is not
+# committed, so it is rendered inside the image instead of being COPYed - the
+# base image already ships ffmpeg. DEMO mode then works out of the box; a
+# container that only ever streams a real input does not need it.
+COPY scripts/make-demo-asset.sh /tmp/make-demo-asset.sh
+RUN mkdir -p /app/demo-assets \
+ && (bash /tmp/make-demo-asset.sh 30 /app/demo-assets/demo-match.mp4 \
+     || echo "[docker] demo asset not generated - DEMO input unavailable") \
+ && rm -f /tmp/make-demo-asset.sh
+
 VOLUME ["/app/.runtime"]
 
 CMD ["node", "/app/stream-worker/dist/index.js"]
